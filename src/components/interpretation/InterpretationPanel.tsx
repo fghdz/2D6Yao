@@ -1,16 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useChart } from '@/hooks/useChart'
-import { extractChartTags, extractEvidenceTags } from '@/engine/chartTags'
-import {
-  listChapters,
-  loadCases,
-  loadRules,
-  matchCases,
-  matchRules,
-  type CorpusCase,
-  type CorpusRule,
-} from '@/engine/corpus'
-import { analyzeEvidence, sixRelatives, type SixRelative } from '@/engine/yongshen'
+import { promptRuleLimit, useChartEvidence } from '@/hooks/useChartEvidence'
+import { useHistory } from '@/hooks/useHistory'
+import { useLessons } from '@/hooks/useLessons'
+import { listChapters, loadCases, matchCases, type CorpusCase } from '@/engine/corpus'
+import { lessonsForTags, tagRecordsForPrompt, tagReliability } from '@/engine/review'
+import { sixRelatives, type SixRelative } from '@/engine/yongshen'
 import { Button } from '@/components/ui/button'
 import { YongshenPanel } from './YongshenPanel'
 import { ChartTagList } from './ChartTagList'
@@ -20,33 +15,26 @@ import { PromptPreview } from './PromptPreview'
 import { AIReadingPanel } from './AIReadingPanel'
 import { buildChartPrompt } from '@/engine/promptBuilder'
 
-const pageSize = 8
+const pageSize = promptRuleLimit
 const caseCount = 3
 
 export function InterpretationPanel() {
-  const { chart, question, chapter, setQuestion, setChapter } = useChart()
-  const [rules, setRules] = useState<CorpusRule[] | null>(null)
+  const { chart, question, chapter, relative, setQuestion, setChapter, setRelative } = useChart()
+  const { rules, rulesFailed, evidence, tags, matches } = useChartEvidence()
+  const { readings } = useHistory()
+  const lessons = useLessons()
   const [cases, setCases] = useState<CorpusCase[] | null>(null)
-  const [failed, setFailed] = useState(false)
-  const [relative, setRelative] = useState<SixRelative | ''>('')
+  const [casesFailed, setCasesFailed] = useState(false)
   const [visible, setVisible] = useState(pageSize)
 
   useEffect(() => {
     let cancelled = false
-    loadRules().then(
-      (loaded) => {
-        if (!cancelled) setRules(loaded)
-      },
-      () => {
-        if (!cancelled) setFailed(true)
-      },
-    )
     loadCases().then(
       (loaded) => {
         if (!cancelled) setCases(loaded)
       },
       () => {
-        if (!cancelled) setFailed(true)
+        if (!cancelled) setCasesFailed(true)
       },
     )
     return () => {
@@ -54,27 +42,6 @@ export function InterpretationPanel() {
     }
   }, [])
 
-  const evidence = useMemo(
-    () =>
-      chart
-        ? analyzeEvidence(chart.liuyao, {
-            chapter: chapter || undefined,
-            relative: relative || undefined,
-          })
-        : null,
-    [chart, chapter, relative],
-  )
-  const tags = useMemo(
-    () =>
-      chart && evidence
-        ? [...extractChartTags(chart.liuyao), ...extractEvidenceTags(evidence)]
-        : [],
-    [chart, evidence],
-  )
-  const matches = useMemo(
-    () => (rules ? matchRules(rules, tags, chapter || undefined) : []),
-    [rules, tags, chapter],
-  )
   const shown = matches.slice(0, visible)
   const caseMatches = useMemo(
     () =>
@@ -85,6 +52,14 @@ export function InterpretationPanel() {
           )
         : [],
     [cases, chart, tags, chapter],
+  )
+
+  // 本机战绩反馈：只把与本卦相关的那几条修正与标签记录并进提示词。
+  const tagIds = useMemo(() => tags.map((tag) => tag.id), [tags])
+  const applicable = useMemo(() => lessonsForTags(lessons, tagIds), [lessons, tagIds])
+  const tagRecords = useMemo(
+    () => tagRecordsForPrompt(tagReliability(readings.filter((reading) => reading.outcome)), tagIds),
+    [readings, tagIds],
   )
 
   if (!chart) {
@@ -98,6 +73,8 @@ export function InterpretationPanel() {
     tags,
     matches: shown,
     cases: caseMatches,
+    lessons: applicable,
+    tagRecords,
   })
 
   return (
@@ -147,7 +124,7 @@ export function InterpretationPanel() {
           ))}
         </select>
         <span className="ml-auto text-xs text-text-muted">
-          {failed ? '条文库载入失败' : rules ? `命中 ${matches.length} 条` : '正在载入条文库…'}
+          {rulesFailed ? '条文库载入失败' : rules ? `命中 ${matches.length} 条` : '正在载入条文库…'}
         </span>
       </label>
 
@@ -163,10 +140,21 @@ export function InterpretationPanel() {
 
       <div className="flex flex-col gap-2">
         <span className="text-sm text-text-muted">
-          相似书例{cases ? '' : '（正在载入书例库…）'}
+          相似书例
+          {casesFailed ? '（书例库载入失败）' : cases ? '' : '（正在载入书例库…）'}
         </span>
         {cases && <CaseMatches matches={caseMatches} tags={tags} />}
       </div>
+
+      {(applicable.length > 0 || tagRecords.length > 0) && (
+        <p className="text-xs text-text-muted">
+          已并入本机战绩：
+          {applicable.length > 0 ? `复盘修正 ${applicable.length} 条` : ''}
+          {applicable.length > 0 && tagRecords.length > 0 ? '、' : ''}
+          {tagRecords.length > 0 ? `${tagRecords.length} 个卦象的应验记录` : ''}
+          （去「历史」页可以关掉或删掉）
+        </p>
+      )}
 
       <AIReadingPanel prompt={prompt} />
       <PromptPreview prompt={prompt} />

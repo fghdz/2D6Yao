@@ -1,13 +1,6 @@
-import { outcomeLabels, type OutcomeStatus, type SavedReading } from '@/db/db'
-
-/** 状态色（dataviz status palette，明暗两种主题通用）。 */
-const statusColors: Record<OutcomeStatus, string> = {
-  accurate: '#0ca30c',
-  partial: '#fab219',
-  wrong: '#d03b3b',
-}
-
-const order: OutcomeStatus[] = ['accurate', 'partial', 'wrong']
+import type { SavedReading } from '@/db/db'
+import { outcomeLabels, statusOrder, type OutcomeStatus } from '@/engine/review'
+import { statusColors } from '@/lib/statusColors'
 
 export function AccuracyStats({ readings }: { readings: readonly SavedReading[] }) {
   const counts: Record<OutcomeStatus, number> = { accurate: 0, partial: 0, wrong: 0 }
@@ -40,7 +33,7 @@ export function AccuracyStats({ readings }: { readings: readonly SavedReading[] 
       {verified > 0 && (
         // 部分到整体：三段占比条，段间留 2px 空隙，两端 4px 圆角。
         <div className="flex h-2.5 gap-[2px] overflow-hidden">
-          {order.map((status) =>
+          {statusOrder.map((status) =>
             counts[status] > 0 ? (
               <div
                 key={status}
@@ -58,7 +51,7 @@ export function AccuracyStats({ readings }: { readings: readonly SavedReading[] 
 
       {/* 颜色之外必须有文字：色块只是辅助，数值与名称照常用文字色。 */}
       <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm">
-        {order.map((status) => (
+        {statusOrder.map((status) => (
           <span key={status} className="flex items-center gap-1.5">
             <span
               aria-hidden

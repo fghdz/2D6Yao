@@ -1,11 +1,14 @@
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { useHistory } from '@/hooks/useHistory'
+import { evidenceSnapshot, useChartEvidence } from '@/hooks/useChartEvidence'
 import { useChartStore } from '@/store/chartStore'
 
 export function SaveChartBar() {
   const { save, update, saving } = useHistory()
   const { chart, question, chapter, exchanges, savedId, setQuestion, setSavedId } = useChartStore()
+  // 存下当时的标签、用神与并入的条文，复盘才能对照**当时**的判断依据。
+  const snapshot = evidenceSnapshot(useChartEvidence())
   const [justSaved, setJustSaved] = useState(false)
 
   useEffect(() => {
@@ -18,7 +21,7 @@ export function SaveChartBar() {
 
   const handleSave = async () => {
     if (saving) return
-    const payload = { question: question.trim(), chapter, chart, exchanges }
+    const payload = { question: question.trim(), chapter, chart, exchanges, ...snapshot }
     if (savedId === null) {
       const id = await save(payload)
       if (id !== undefined) setSavedId(id)

@@ -2,6 +2,8 @@ import { hasChangedHexagram } from './liuyao'
 import type { ChartData } from './types'
 import type { ChartTag } from './chartTags'
 import type { CaseMatch, RuleMatch } from './corpus'
+import type { Lesson, TagRecord } from './review'
+import { errorKindLabels, outcomeLabels, statusOrder } from './review'
 import type { ChartEvidence } from './yongshen'
 
 const positionLabels = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻']
@@ -13,6 +15,10 @@ export interface PromptContext {
   tags?: readonly ChartTag[]
   matches?: readonly RuleMatch[]
   cases?: readonly CaseMatch[]
+  /** 本机复盘反推出来的修正，只传和本卦相关的那几条。 */
+  lessons?: readonly Lesson[]
+  /** 本机在本卦这些标签上的历史应验记录。 */
+  tagRecords?: readonly TagRecord[]
 }
 
 /** 把卦盘整理成结构化文本，供复制给 LLM 或人工断卦参考。 */
@@ -111,7 +117,35 @@ export function buildChartPrompt(chart: ChartData, context: PromptContext = {}):
     }
   }
 
-  lines.push('', buildInstruction())
+  const lessons = context.lessons ?? []
+  if (lessons.length > 0) {
+    lines.push(
+      '',
+      '本机复盘修正（由用户自己回填的实际结果反推，不是书中条文，样本少、可能是巧合）：',
+    )
+    for (const lesson of lessons) {
+      const from =
+        lesson.fromReadingIds.length > 0 ? `，依据本机记录 #${lesson.fromReadingIds.join(' #')}` : ''
+      lines.push(
+        `[修正·${errorKindLabels[lesson.kind]}] ${lesson.title}`,
+        `  触发：${lesson.trigger || '（未写）'}`,
+        `  应当：${lesson.correction}${from}`,
+      )
+    }
+  }
+
+  const tagRecords = (context.tagRecords ?? []).filter((record) => record.total > 0)
+  if (tagRecords.length > 0) {
+    lines.push('', '本机历史应验记录（只列与本卦相关的标签）：')
+    for (const record of tagRecords) {
+      const parts = statusOrder
+        .filter((status) => record.counts[status] > 0)
+        .map((status) => `${outcomeLabels[status]} ${record.counts[status]}`)
+      lines.push(`${record.label}：回填 ${record.total} 卦（${parts.join(' · ')}）`)
+    }
+  }
+
+  lines.push('', buildInstruction(lessons.length > 0 || tagRecords.length > 0))
 
   return lines.join('\n')
 }
@@ -122,10 +156,18 @@ function truncate(text: string, limit: number): string {
 }
 
 /** 与 SCHEMA.md 的分工一致：盘面事实既定，推理归 LLM，但每步要带依据。 */
-function buildInstruction(): string {
-  return [
+function buildInstruction(hasLocalRecord: boolean): string {
+  const lines = [
     '以上盘面事实由排盘引擎算出，是既定输入：纳甲、六亲、世应、旺衰、旬空、月破日破、伏神、动变一律照用，不要重算或改写。',
     '请在此基础上推理：先判用神旺衰与生克关系，再权衡命中条文（条文之间可能互相矛盾，需说明为何取此舍彼），然后给出结论与应期。',
     '每条结论标明依据：「依据 [条文编号]」「参照 [书例#编号]」或「推断」；证据不足处直说不足，不要凑。',
-  ].join('\n')
+  ]
+  if (hasLocalRecord) {
+    // 本机记录只有几十卦，统计上说明不了什么；给它高于书中条文的分量会越用越偏。
+    lines.push(
+      '本机复盘修正与应验记录来自用户自己回填的少量样本，只作提醒，权重低于书中条文：与条文冲突时以条文为准，但要明说冲突在哪、为何仍取条文。',
+      '用到修正时标明「参照 [本机修正]」；样本少于 5 卦的应验记录不足以支撑结论，不要当依据用。',
+    )
+  }
+  return lines.join('\n')
 }

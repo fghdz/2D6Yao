@@ -28,6 +28,8 @@ export interface ReadingRequest {
   config: AiConfig
   /** 首条是卦盘证据，其后是追问与回答，供多轮问答沿用同一份卦。 */
   messages: ChatMessage[]
+  /** 复盘走的是另一套角色设定，默认仍是断卦。 */
+  system?: string
   signal?: AbortSignal
 }
 
@@ -41,7 +43,7 @@ export async function streamReading(
 
 /** Anthropic 原生接口，用官方 SDK，开自适应思考。 */
 async function streamAnthropic(
-  { config, messages, signal }: ReadingRequest,
+  { config, messages, system, signal }: ReadingRequest,
   handlers: ReadingHandlers,
 ): Promise<void> {
   const { default: Anthropic } = await import('@anthropic-ai/sdk')
@@ -56,7 +58,7 @@ async function streamAnthropic(
       model: config.model,
       max_tokens: 32000,
       thinking: { type: 'adaptive', display: 'summarized' },
-      system: systemPrompt,
+      system: system ?? systemPrompt,
       messages,
     },
     { signal },
@@ -79,7 +81,7 @@ interface OpenAiDelta {
 
 /** OpenAI 兼容接口：POST {base}/chat/completions，手工解 SSE。 */
 async function streamOpenAiCompatible(
-  { config, messages, signal }: ReadingRequest,
+  { config, messages, system, signal }: ReadingRequest,
   handlers: ReadingHandlers,
 ): Promise<void> {
   const base = normalizeBaseUrl(config.baseUrl)
@@ -93,7 +95,7 @@ async function streamOpenAiCompatible(
     body: JSON.stringify({
       model: config.model,
       stream: true,
-      messages: [{ role: 'system', content: systemPrompt }, ...messages],
+      messages: [{ role: 'system', content: system ?? systemPrompt }, ...messages],
     }),
   })
 

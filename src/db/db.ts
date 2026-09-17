@@ -1,33 +1,8 @@
 import Dexie, { type EntityTable } from 'dexie'
-import type { ChartData } from '@/engine/types'
-import type { ReadingExchange } from '@/engine/llm'
+import type { Lesson, ReadingRecord } from '@/engine/review'
 
-export type OutcomeStatus = 'accurate' | 'partial' | 'wrong'
-
-export const outcomeLabels: Record<OutcomeStatus, string> = {
-  accurate: '应验',
-  partial: '部分应验',
-  wrong: '未应验',
-}
-
-/** 事后回填的实际结果，用来统计准确率。 */
-export interface ReadingOutcome {
-  status: OutcomeStatus
-  note: string
-  recordedAt: number
-}
-
-export interface SavedReading {
-  id?: number
+export interface SavedReading extends ReadingRecord {
   createdAt: number
-  /** 所问何事。旧记录存在 label 里，读取时回退。 */
-  question?: string
-  label?: string
-  chapter?: string
-  chart: ChartData
-  /** AI 断卦与追问，存下来才能回头复盘。 */
-  exchanges?: ReadingExchange[]
-  outcome?: ReadingOutcome
 }
 
 export function readingTitle(reading: SavedReading): string {
@@ -36,8 +11,15 @@ export function readingTitle(reading: SavedReading): string {
 
 export const db = new Dexie('liuyao') as Dexie & {
   readings: EntityTable<SavedReading, 'id'>
+  lessons: EntityTable<Lesson, 'id'>
 }
 
 db.version(1).stores({
   readings: '++id, createdAt',
+})
+
+// 复盘修正独立成表：它由历史记录反推而来，删一条历史不该连带删掉已经学到的东西。
+db.version(2).stores({
+  readings: '++id, createdAt',
+  lessons: '++id, createdAt',
 })

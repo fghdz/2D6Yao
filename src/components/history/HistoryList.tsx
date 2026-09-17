@@ -2,7 +2,8 @@ import { useHistory } from '@/hooks/useHistory'
 import { useChartStore } from '@/store/chartStore'
 import { HistoryEntryCard } from './HistoryEntryCard'
 import { AccuracyStats } from './AccuracyStats'
-import type { OutcomeStatus } from '@/db/db'
+import { ReviewPanel } from './ReviewPanel'
+import type { OutcomeStatus } from '@/engine/review'
 
 export function HistoryList() {
   const { readings, update, remove } = useHistory()
@@ -15,6 +16,7 @@ export function HistoryList() {
   return (
     <div className="flex flex-col gap-4">
       <AccuracyStats readings={readings} />
+      <ReviewPanel readings={readings} />
 
       <div className="flex flex-col gap-2">
         {readings.map((reading) => (

@@ -1,15 +1,9 @@
 import { useState } from 'react'
 import { Button } from '@/components/ui/button'
-import { outcomeLabels, readingTitle, type OutcomeStatus, type SavedReading } from '@/db/db'
+import { readingTitle, type SavedReading } from '@/db/db'
 import { hasChangedHexagram } from '@/engine/liuyao'
-
-const statusColors: Record<OutcomeStatus, string> = {
-  accurate: '#0ca30c',
-  partial: '#fab219',
-  wrong: '#d03b3b',
-}
-
-const order: OutcomeStatus[] = ['accurate', 'partial', 'wrong']
+import { outcomeLabels, statusOrder, type OutcomeStatus } from '@/engine/review'
+import { statusColors } from '@/lib/statusColors'
 
 export function HistoryEntryCard({
   reading,
@@ -83,7 +77,7 @@ export function HistoryEntryCard({
           <div className="flex flex-col gap-2 border-t border-border pt-3">
             <span className="text-text-muted">实际结果</span>
             <div className="flex flex-wrap gap-1.5">
-              {order.map((status) => {
+              {statusOrder.map((status) => {
                 const active = reading.outcome?.status === status
                 return (
                   <button

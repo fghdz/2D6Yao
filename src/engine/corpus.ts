@@ -105,7 +105,7 @@ export function matchCases(
   hexagramName: string,
   chapterName?: string,
 ): CaseMatch[] {
-  const tagIds = new Set(tags.map((tag) => tag.id))
+  const tagIds = new Set<string>(tags.map((tag) => tag.id))
   const weightOf = inverseFrequency(cases)
 
   return cases
@@ -145,7 +145,7 @@ export function matchRules(
   tags: readonly ChartTag[],
   chapterName?: string,
 ): RuleMatch[] {
-  const tagIds = new Set(tags.map((tag) => tag.id))
+  const tagIds = new Set<string>(tags.map((tag) => tag.id))
   const weightOf = inverseFrequency(rules)
 
   return rules
