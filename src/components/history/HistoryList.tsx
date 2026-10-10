@@ -3,6 +3,7 @@ import { useChartStore } from '@/store/chartStore'
 import { HistoryEntryCard } from './HistoryEntryCard'
 import { AccuracyStats } from './AccuracyStats'
 import { ReviewPanel } from './ReviewPanel'
+import { ExportBar } from './ExportBar'
 import type { OutcomeStatus } from '@/engine/review'
 
 export function HistoryList() {
@@ -17,6 +18,7 @@ export function HistoryList() {
     <div className="flex flex-col gap-4">
       <AccuracyStats readings={readings} />
       <ReviewPanel readings={readings} />
+      <ExportBar readings={readings} />
 
       <div className="flex flex-col gap-2">
         {readings.map((reading) => (

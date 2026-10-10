@@ -95,7 +95,7 @@ export interface TagRecord {
   label: string
   counts: Record<OutcomeStatus, number>
   total: number
-  /** 应验率，部分应验算半次。 */
+  /** 应验率，与「历史」页顶部同口径：应验 / 已回填，部分应验不折算。 */
   hitRate: number
   /** 未应验率的 Wilson 95% 下界，用来排序。 */
   missLowerBound: number
@@ -136,14 +136,15 @@ export function tagReliability(records: readonly ReadingRecord[]): TagRecord[] {
   return [...buckets]
     .map(([tagId, counts]) => {
       const total = counts.accurate + counts.partial + counts.wrong
-      const hits = counts.accurate + counts.partial * 0.5
+      // 排序时部分应验算半次失手：它确实比全中差、比全错好。显示的应验率则不折算。
+      const misses = counts.wrong + counts.partial * 0.5
       return {
         tagId,
         label: tagLabels[tagId as keyof typeof tagLabels] ?? tagId,
         counts,
         total,
-        hitRate: hits / total,
-        missLowerBound: wilsonLowerBound(total - hits, total),
+        hitRate: counts.accurate / total,
+        missLowerBound: wilsonLowerBound(misses, total),
       }
     })
     .sort(
