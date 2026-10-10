@@ -5,6 +5,7 @@ import { AccuracyStats } from './AccuracyStats'
 import { ReviewPanel } from './ReviewPanel'
 import { ExportBar } from './ExportBar'
 import type { OutcomeStatus } from '@/engine/review'
+import type { QuestionKind } from '@/engine/questionType'
 
 export function HistoryList() {
   const { readings, update, remove } = useHistory()
@@ -30,6 +31,14 @@ export function HistoryList() {
             onRecordOutcome={(status: OutcomeStatus, note: string) => {
               if (reading.id === undefined) return
               void update(reading.id, { outcome: { status, note, recordedAt: Date.now() } })
+            }}
+            onSaveNote={(note: string) => {
+              if (reading.id === undefined || !reading.outcome) return
+              void update(reading.id, { outcome: { ...reading.outcome, note } })
+            }}
+            onSetKind={(questionKind: QuestionKind) => {
+              if (reading.id === undefined) return
+              void update(reading.id, { questionKind })
             }}
           />
         ))}

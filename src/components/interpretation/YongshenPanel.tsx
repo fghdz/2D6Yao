@@ -26,7 +26,14 @@ function Chips({ items, tone }: { items: readonly string[]; tone: 'support' | 'c
 }
 
 /** 用神取用与生克链：用神落在哪几爻、各有什么支持与反证，原神忌神在不在卦。 */
-export function YongshenPanel({ evidence }: { evidence: ChartEvidence }) {
+export function YongshenPanel({
+  evidence,
+  sourceLabel,
+}: {
+  evidence: ChartEvidence
+  /** 用神来源的说明；不传就用引擎自带的（它把按事类指定的六亲也叫「用户指定」）。 */
+  sourceLabel?: string
+}) {
   const candidate = evidence.selectedCandidate
   if (!candidate) return null
 
@@ -38,7 +45,7 @@ export function YongshenPanel({ evidence }: { evidence: ChartEvidence }) {
           {candidate.label}
           {candidate.relative ? `（${candidate.relative}）` : ''}
         </span>
-        <span className="text-xs text-text-muted">{candidate.sourceStatus}</span>
+        <span className="text-xs text-text-muted">{sourceLabel ?? candidate.sourceStatus}</span>
       </div>
 
       {candidate.references.length === 0 ? (

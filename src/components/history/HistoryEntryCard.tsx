@@ -2,7 +2,8 @@ import { useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { readingTitle, type SavedReading } from '@/db/db'
 import { hasChangedHexagram } from '@/engine/liuyao'
-import { outcomeLabels, statusOrder, type OutcomeStatus } from '@/engine/review'
+import { outcomeLabels, readingKind, statusOrder, type OutcomeStatus } from '@/engine/review'
+import { questionKindLabels, type QuestionKind } from '@/engine/questionType'
 import { statusColors } from '@/lib/statusColors'
 
 export function HistoryEntryCard({
@@ -10,16 +11,24 @@ export function HistoryEntryCard({
   onOpen,
   onDelete,
   onRecordOutcome,
+  onSaveNote,
+  onSetKind,
 }: {
   reading: SavedReading
   onOpen: () => void
   onDelete: () => void
+  /** 评定（会清掉「过期」标记）。 */
   onRecordOutcome: (status: OutcomeStatus, note: string) => void
+  /** 只改实际经过，不动评定。 */
+  onSaveNote: (note: string) => void
+  onSetKind: (kind: QuestionKind) => void
 }) {
   const [expanded, setExpanded] = useState(false)
   const [note, setNote] = useState(reading.outcome?.note ?? '')
   const { liuyao } = reading.chart
   const exchanges = reading.exchanges ?? []
+  const kind = readingKind(reading)
+  const stale = Boolean(reading.outcome?.stale)
 
   return (
     <div className="flex flex-col gap-2 rounded-md border border-border p-3 text-sm">
@@ -33,16 +42,32 @@ export function HistoryEntryCard({
             {new Date(reading.createdAt).toLocaleString('zh-CN')}
           </span>
         </div>
-        {reading.outcome && (
-          <span className="flex shrink-0 items-center gap-1.5 text-xs">
-            <span
-              aria-hidden
-              className="size-2.5 rounded-full"
-              style={{ backgroundColor: statusColors[reading.outcome.status] }}
-            />
-            {outcomeLabels[reading.outcome.status]}
-          </span>
-        )}
+        <div className="flex shrink-0 flex-col items-end gap-1 text-xs">
+          {reading.outcome &&
+            (stale ? (
+              <span className="flex items-center gap-1.5 text-text-muted">
+                <span aria-hidden className="size-2.5 rounded-full border border-border" />
+                待重新评定
+              </span>
+            ) : (
+              <span className="flex items-center gap-1.5">
+                <span
+                  aria-hidden
+                  className="size-2.5 rounded-full"
+                  style={{ backgroundColor: statusColors[reading.outcome.status] }}
+                />
+                {outcomeLabels[reading.outcome.status]}
+              </span>
+            ))}
+          {/* 题型可以点着切换：推断错了（比如「什么时候还」其实是在问还不还）就改过来。 */}
+          <button
+            onClick={() => onSetKind(kind === 'binary' ? 'xiang' : 'binary')}
+            title="点一下切换题型"
+            className="rounded-full border border-border px-2 py-0.5 text-text-muted hover:bg-surface"
+          >
+            {questionKindLabels[kind]}
+          </button>
+        </div>
       </div>
 
       <div className="flex flex-wrap gap-2">
@@ -75,10 +100,15 @@ export function HistoryEntryCard({
           )}
 
           <div className="flex flex-col gap-2 border-t border-border pt-3">
-            <span className="text-text-muted">实际结果</span>
+            <span className="text-text-muted">断语说中了吗</span>
+            {stale && (
+              <p className="text-xs text-moving">
+                这一卦重新断过，原来的评定针对的是旧断语，已不计入统计。请对照新断语重新评定。
+              </p>
+            )}
             <div className="flex flex-wrap gap-1.5">
               {statusOrder.map((status) => {
-                const active = reading.outcome?.status === status
+                const active = !stale && reading.outcome?.status === status
                 return (
                   <button
                     key={status}
@@ -98,12 +128,13 @@ export function HistoryEntryCard({
                 )
               })}
             </div>
+            <p className="text-xs text-text-muted">
+              只看主问题的成与不成有没有说中；一卦问了好几问、对一半错一半，才选「部分应验」。
+            </p>
             <textarea
               value={note}
               onChange={(e) => setNote(e.target.value)}
-              onBlur={() =>
-                reading.outcome && onRecordOutcome(reading.outcome.status, note)
-              }
+              onBlur={() => reading.outcome && note !== reading.outcome.note && onSaveNote(note)}
               rows={2}
               placeholder="后来实际发生了什么？记下来才好回头对照。"
               className="rounded-md border border-border bg-transparent px-2 py-1 text-sm outline-none"

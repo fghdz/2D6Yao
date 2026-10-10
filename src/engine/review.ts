@@ -1,5 +1,6 @@
 import { extractChartTags, extractEvidenceTags, tagLabels } from './chartTags'
 import { analyzeEvidence } from './yongshen'
+import { inferQuestionKind, type QuestionKind } from './questionType'
 import type { ChartData } from './types'
 import type { ReadingExchange } from './llm'
 
@@ -19,6 +20,11 @@ export interface ReadingOutcome {
   status: OutcomeStatus
   note: string
   recordedAt: number
+  /**
+   * 断语重新断过之后，旧的「应验/未应验」评的是旧断语，不能再算数：
+   * 实际经过（note）照留，评定标记为过期，统计时当作待评，等重新评定。
+   */
+  stale?: boolean
 }
 
 /**
@@ -36,6 +42,34 @@ export interface ReadingRecord {
   ruleIds?: string[]
   exchanges?: ReadingExchange[]
   outcome?: ReadingOutcome
+  /** 用户手动改过的题型；没改过就按问题文字推断。 */
+  questionKind?: QuestionKind
+}
+
+/** 有效的评定：有回填、且评的是当前这份断语。 */
+export function verifiedOutcome(record: ReadingRecord): ReadingOutcome | undefined {
+  return record.outcome && !record.outcome.stale ? record.outcome : undefined
+}
+
+export function readingKind(record: ReadingRecord): QuestionKind {
+  return record.questionKind ?? inferQuestionKind(record.question || record.label || '')
+}
+
+/** 应验率统一口径：应验 / 有效评定，部分应验不折算；过期评定当作待评。 */
+export function countOutcomes(records: readonly ReadingRecord[]) {
+  const counts: Record<OutcomeStatus, number> = { accurate: 0, partial: 0, wrong: 0 }
+  for (const record of records) {
+    const outcome = verifiedOutcome(record)
+    if (outcome) counts[outcome.status] += 1
+  }
+  const verified = counts.accurate + counts.partial + counts.wrong
+  return {
+    counts,
+    total: records.length,
+    verified,
+    pending: records.length - verified,
+    hitRate: verified > 0 ? counts.accurate / verified : null,
+  }
 }
 
 export const errorKinds = [
@@ -123,7 +157,7 @@ export function tagReliability(records: readonly ReadingRecord[]): TagRecord[] {
   const buckets = new Map<string, Record<OutcomeStatus, number>>()
 
   for (const record of records) {
-    const outcome = record.outcome
+    const outcome = verifiedOutcome(record)
     if (!outcome) continue
     // 同一标签在一卦里只算一次。
     for (const tagId of new Set(readingTagIds(record))) {

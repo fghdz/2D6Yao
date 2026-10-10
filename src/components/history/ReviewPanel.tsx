@@ -10,7 +10,7 @@ import {
   postmortemSystemPrompt,
   toLesson,
 } from '@/engine/postmortem'
-import { errorKindLabels, tagReliability } from '@/engine/review'
+import { errorKindLabels, readingKind, tagReliability, verifiedOutcome } from '@/engine/review'
 import { addLessons, removeLesson, setLessonEnabled, useLessons } from '@/hooks/useLessons'
 import { useSettingsStore } from '@/store/settingsStore'
 import { TagReliability } from './TagReliability'
@@ -28,8 +28,12 @@ export function ReviewPanel({ readings }: { readings: readonly SavedReading[] })
   const [error, setError] = useState('')
   const [found, setFound] = useState<number | null>(null)
 
-  const verified = useMemo(() => readings.filter((reading) => reading.outcome), [readings])
-  const tagRecords = useMemo(() => tagReliability(verified), [verified])
+  const verified = useMemo(() => readings.filter((reading) => verifiedOutcome(reading)), [readings])
+  // 分卦象的战绩只看是非题：取象题说没说中，跟卦象主吉主凶无关。
+  const tagRecords = useMemo(
+    () => tagReliability(verified.filter((reading) => readingKind(reading) === 'binary')),
+    [verified],
+  )
   const titles = useMemo(
     () => new Map(readings.map((reading) => [reading.id, readingTitle(reading)])),
     [readings],

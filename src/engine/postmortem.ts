@@ -1,6 +1,7 @@
 import { hasChangedHexagram } from './liuyao'
 import { tagLabels } from './chartTags'
-import { errorKinds, errorKindLabels, outcomeLabels, readingTagIds } from './review'
+import { errorKinds, errorKindLabels, outcomeLabels, readingKind, readingTagIds } from './review'
+import { questionKindLabels } from './questionType'
 import type { CorpusRule } from './corpus'
 import type { ErrorKind, Lesson, ReadingRecord } from './review'
 
@@ -50,7 +51,7 @@ function describe(record: ReadingRecord, rulesById: Map<string, CorpusRule>): st
   const tagIds = readingTagIds(record)
   const lines = [
     `--- 记录 #${record.id} ---`,
-    `问事：${title(record)}`,
+    `问事：${title(record)}（${questionKindLabels[readingKind(record)]}）`,
     `卦：${liuyao.originalName}${hasChangedHexagram(liuyao) ? ` → ${liuyao.changedName}` : '（静卦）'}` +
       `${record.chapter ? ` · 事类 ${record.chapter}` : ''}${record.yongshen ? ` · 用神 ${record.yongshen}` : ''}`,
     `卦象标签：${namedTags(tagIds)}`,

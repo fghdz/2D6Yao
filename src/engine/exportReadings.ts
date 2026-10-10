@@ -1,11 +1,19 @@
 import { hasChangedHexagram } from './liuyao'
 import { tagLabels } from './chartTags'
-import { errorKindLabels, outcomeLabels, readingTagIds, statusOrder, tagReliability } from './review'
-import type { Lesson, OutcomeStatus, ReadingRecord } from './review'
+import {
+  countOutcomes,
+  errorKindLabels,
+  outcomeLabels,
+  readingKind,
+  readingTagIds,
+  tagReliability,
+} from './review'
+import { questionKindLabels } from './questionType'
+import type { Lesson, ReadingRecord } from './review'
 
 /** 文件格式标识与版本：以后字段有变，拿到旧文件也能认出来是哪一版。 */
 export const exportFormat = '2d6yao-readings'
-export const exportVersion = 1
+export const exportVersion = 2
 
 const positionLabels = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻']
 
@@ -64,6 +72,10 @@ function exportReading(record: ExportableReading) {
     question: record.question || record.label || null,
     chapter: record.chapter || null,
     yongshen: record.yongshen ?? null,
+    questionKind: readingKind(record),
+    questionKindLabel: questionKindLabels[readingKind(record)],
+    // manual = 用户在历史页手动改过题型；inferred = 按问题文字推断。
+    questionKindSource: record.questionKind ? 'manual' : 'inferred',
     ...exportChart(record),
     tags: readingTagIds(record).map((id) => ({ id, label: labelOf(id) })),
     // 旧记录没存快照，标签是导出时按事类现算的，用神可能和当时手选的不一样。
@@ -80,47 +92,36 @@ function exportReading(record: ExportableReading) {
           label: outcomeLabels[record.outcome.status],
           note: record.outcome.note,
           recordedAt: iso(record.outcome.recordedAt),
+          // true = 之后重新断过卦，这条评定针对旧断语，不计入统计。
+          stale: Boolean(record.outcome.stale),
         }
       : null,
   }
 }
 
-function countByStatus(records: readonly ReadingRecord[]): Record<OutcomeStatus, number> {
-  const counts: Record<OutcomeStatus, number> = { accurate: 0, partial: 0, wrong: 0 }
-  for (const record of records) if (record.outcome) counts[record.outcome.status] += 1
-  return counts
-}
-
-/** 与「历史」页显示的数字同口径：应验率 = 应验 / 已回填，部分应验不折算。 */
+/** 与「历史」页同口径：应验率 = 应验 / 有效评定，部分应验不折算；重新断过的评定不计。 */
 function summarize(records: readonly ExportableReading[]) {
-  const byStatus = countByStatus(records)
-  const verified = statusOrder.reduce((total, status) => total + byStatus[status], 0)
+  const binary = records.filter((record) => readingKind(record) === 'binary')
+  const xiang = records.filter((record) => readingKind(record) === 'xiang')
 
   const chapters = new Map<string, ExportableReading[]>()
-  for (const record of records) {
+  for (const record of binary) {
     const key = record.chapter || '未分类'
     chapters.set(key, [...(chapters.get(key) ?? []), record])
   }
 
+  const block = (group: readonly ExportableReading[]) => {
+    const { counts, total, verified, pending, hitRate } = countOutcomes(group)
+    return { total, verified, pending, byStatus: counts, hitRate }
+  }
+
   return {
-    total: records.length,
-    verified,
-    pending: records.length - verified,
-    byStatus,
-    hitRate: verified > 0 ? byStatus.accurate / verified : null,
-    byChapter: [...chapters].map(([chapter, group]) => {
-      const counts = countByStatus(group)
-      const groupVerified = statusOrder.reduce((total, status) => total + counts[status], 0)
-      return {
-        chapter,
-        total: group.length,
-        verified: groupVerified,
-        byStatus: counts,
-        hitRate: groupVerified > 0 ? counts.accurate / groupVerified : null,
-      }
-    }),
+    all: block(records),
+    byKind: { binary: block(binary), xiang: block(xiang) },
+    // 以下只算是非题。
+    byChapter: [...chapters].map(([chapter, group]) => ({ chapter, ...block(group) })),
     // App 里「分卦象看应验」的同一份数据；rankScore 是排序用的未应验率 Wilson 下界。
-    byTag: tagReliability(records).map((record) => ({
+    byTag: tagReliability(binary).map((record) => ({
       tagId: record.tagId,
       label: record.label,
       total: record.total,

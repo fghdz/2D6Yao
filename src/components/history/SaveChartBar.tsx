@@ -3,11 +3,16 @@ import { Button } from '@/components/ui/button'
 import { useHistory } from '@/hooks/useHistory'
 import { evidenceSnapshot, useChartEvidence } from '@/hooks/useChartEvidence'
 import { useChartStore } from '@/store/chartStore'
+import { db } from '@/db/db'
+import type { ReadingExchange } from '@/engine/llm'
+
+/** 主断语是第一轮（整卦解读）；追问不改变当初的判断。 */
+const mainAnswer = (list?: readonly ReadingExchange[]) => list?.[0]?.answer ?? ''
 
 export function SaveChartBar() {
   const { save, update, saving } = useHistory()
-  const { chart, question, chapter, exchanges, savedId, setQuestion, setSavedId } = useChartStore()
-  // 存下当时的标签、用神与并入的条文，复盘才能对照**当时**的判断依据。
+  const { chart, question, exchanges, savedId, setQuestion, setSavedId } = useChartStore()
+  // 存下当时实际采用的事类、用神、标签与条文，复盘才能对照**当时**的判断依据。
   const snapshot = evidenceSnapshot(useChartEvidence())
   const [justSaved, setJustSaved] = useState(false)
 
@@ -21,12 +26,21 @@ export function SaveChartBar() {
 
   const handleSave = async () => {
     if (saving) return
-    const payload = { question: question.trim(), chapter, chart, exchanges, ...snapshot }
+    const payload = { question: question.trim(), chart, exchanges, ...snapshot }
     if (savedId === null) {
       const id = await save(payload)
       if (id !== undefined) setSavedId(id)
     } else {
-      await update(savedId, payload)
+      // 重新断过卦：旧的应验评定评的是旧断语，标记过期，实际经过照留，等重新评定。
+      const existing = await db.readings.get(savedId)
+      const rejudged =
+        existing?.outcome && mainAnswer(existing.exchanges) !== mainAnswer(exchanges)
+      await update(
+        savedId,
+        rejudged && existing.outcome
+          ? { ...payload, outcome: { ...existing.outcome, stale: true } }
+          : payload,
+      )
     }
     setJustSaved(true)
   }

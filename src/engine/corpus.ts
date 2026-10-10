@@ -76,10 +76,6 @@ export async function loadCases(): Promise<CorpusCase[]> {
   return caseCache
 }
 
-export function listChapters(rules: readonly CorpusRule[]): string[] {
-  return [...new Set(rules.map((rule) => rule.chapter_name))]
-}
-
 function inverseFrequency(documents: ReadonlyArray<{ tags: string[] }>) {
   const counts = new Map<string, number>()
   for (const doc of documents) {

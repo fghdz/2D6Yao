@@ -27,7 +27,7 @@ export function TagReliability({ records }: { records: readonly TagRecord[] }) {
     <div className="flex flex-col gap-2">
       <div className="flex flex-wrap items-baseline gap-x-2">
         <span className="text-sm text-text-muted">分卦象看应验</span>
-        <span className="text-xs text-text-muted">失手最多的排在前面</span>
+        <span className="text-xs text-text-muted">只算是非题，失手最多的排在前面</span>
       </div>
 
       <div className="flex flex-col gap-1.5">

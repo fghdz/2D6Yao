@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { db, type SavedReading } from '@/db/db'
 import { buildReadingsExport, exportFileName } from '@/engine/exportReadings'
 import { canShareFile, downloadFile, shareFile } from '@/lib/saveFile'
+import { verifiedOutcome } from '@/engine/review'
 
 type Action = 'download' | 'share' | 'copy'
 
@@ -19,7 +20,7 @@ export function ExportBar({ readings }: { readings: readonly SavedReading[] }) {
   const [message, setMessage] = useState('')
   const [failed, setFailed] = useState(false)
 
-  const verified = readings.filter((reading) => reading.outcome).length
+  const verified = readings.filter((reading) => verifiedOutcome(reading)).length
   // canShare 要拿一个文件才能问；用空壳问一次，只看浏览器支不支持分享 JSON 文件。
   const shareSupported = canShareFile(
     new File(['{}'], 'probe.json', { type: 'application/json' }),

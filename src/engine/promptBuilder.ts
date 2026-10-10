@@ -5,6 +5,7 @@ import type { CaseMatch, RuleMatch } from './corpus'
 import type { Lesson, TagRecord } from './review'
 import { errorKindLabels, outcomeLabels, statusOrder } from './review'
 import type { ChartEvidence } from './yongshen'
+import type { LatentState } from './latent'
 
 const positionLabels = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻']
 
@@ -15,6 +16,8 @@ export interface PromptContext {
   tags?: readonly ChartTag[]
   matches?: readonly RuleMatch[]
   cases?: readonly CaseMatch[]
+  /** 旬空、月破、伏藏、入墓的真假判定。 */
+  latent?: readonly LatentState[]
   /** 本机复盘反推出来的修正，只传和本卦相关的那几条。 */
   lessons?: readonly Lesson[]
   /** 本机在本卦这些标签上的历史应验记录。 */
@@ -90,6 +93,17 @@ export function buildChartPrompt(chart: ChartData, context: PromptContext = {}):
     }
   }
 
+  const latent = context.latent ?? []
+  if (latent.length > 0) {
+    lines.push('', '空破伏墓真假（引擎按《增删卜易》旺动生扶之法判定）：')
+    for (const item of latent) {
+      lines.push(
+        `${item.subject} ${item.kind} → ${item.verdict}（${item.reasons.join('；')}）` +
+          (item.timing.length > 0 ? ` 应期：${item.timing.join('、')}` : ''),
+      )
+    }
+  }
+
   if (context.tags && context.tags.length > 0) {
     lines.push('', '卦象标签：')
     for (const tag of context.tags) lines.push(`${tag.label}：${tag.reason}`)
@@ -145,7 +159,13 @@ export function buildChartPrompt(chart: ChartData, context: PromptContext = {}):
     }
   }
 
-  lines.push('', buildInstruction(lessons.length > 0 || tagRecords.length > 0))
+  lines.push(
+    '',
+    buildInstruction({
+      hasLatent: latent.length > 0,
+      hasLocalRecord: lessons.length > 0 || tagRecords.length > 0,
+    }),
+  )
 
   return lines.join('\n')
 }
@@ -156,12 +176,25 @@ function truncate(text: string, limit: number): string {
 }
 
 /** 与 SCHEMA.md 的分工一致：盘面事实既定，推理归 LLM，但每步要带依据。 */
-function buildInstruction(hasLocalRecord: boolean): string {
+function buildInstruction({
+  hasLatent,
+  hasLocalRecord,
+}: {
+  hasLatent: boolean
+  hasLocalRecord: boolean
+}): string {
   const lines = [
     '以上盘面事实由排盘引擎算出，是既定输入：纳甲、六亲、世应、旺衰、旬空、月破日破、伏神、动变一律照用，不要重算或改写。',
     '请在此基础上推理：先判用神旺衰与生克关系，再权衡命中条文（条文之间可能互相矛盾，需说明为何取此舍彼），然后给出结论与应期。',
     '每条结论标明依据：「依据 [条文编号]」「参照 [书例#编号]」或「推断」；证据不足处直说不足，不要凑。',
   ]
+  if (hasLatent) {
+    // 回填数据里最常见的失手：见空断无、见伏断不成，而应事之日恰是那一爻出空填实之日。
+    lines.push(
+      '旬空、月破、伏藏、入墓一律以上面的真假判定为准：判为假空、假破、伏而可出、旺而暂收的，只说明时候未到，只能用来推应期，不得作为成败吉凶的主要依据；判为真空、真破、伏而难出、衰而入墓的，才主落空难成。',
+      '忌神、仇神同样适用：发动之爻逢空不为空，出空即发作，不能因为它旬空、入墓就当它无力。',
+    )
+  }
   if (hasLocalRecord) {
     // 本机记录只有几十卦，统计上说明不了什么；给它高于书中条文的分量会越用越偏。
     lines.push(
