@@ -10,9 +10,13 @@ const dirname = path.dirname(fileURLToPath(import.meta.url))
 // GitHub Pages 把站点挂在 /<repo>/ 下，由部署工作流传入；本地开发仍是根路径。
 const base = process.env.BASE_PATH ?? '/'
 
+// 版本号写进每条断语：换了规则或模型之后，回测才分得清是哪一版断的。
+const appVersion = `${(process.env.GITHUB_SHA ?? 'dev').slice(0, 7)}·${new Date().toISOString().slice(0, 10)}`
+
 // https://vite.dev/config/
 export default defineConfig({
   base,
+  define: { __APP_VERSION__: JSON.stringify(appVersion) },
   plugins: [
     react(),
     tailwindcss(),

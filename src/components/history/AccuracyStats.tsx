@@ -1,6 +1,6 @@
 import type { SavedReading } from '@/db/db'
 import { questionKindLabels } from '@/engine/questionType'
-import { countOutcomes, outcomeLabels, readingKind, statusOrder } from '@/engine/review'
+import { countOutcomes, outcomeLabels, readingKind, scoreReading, statusOrder } from '@/engine/review'
 import { statusColors } from '@/lib/statusColors'
 
 /**
@@ -12,7 +12,7 @@ export function AccuracyStats({ readings }: { readings: readonly SavedReading[] 
 
   const binary = countOutcomes(readings.filter((reading) => readingKind(reading) === 'binary'))
   const xiang = countOutcomes(readings.filter((reading) => readingKind(reading) === 'xiang'))
-  const stale = readings.filter((reading) => reading.outcome?.stale).length
+  const stale = readings.filter((reading) => reading.outcome?.stale && !scoreReading(reading)).length
   const pending = binary.pending + xiang.pending
 
   return (

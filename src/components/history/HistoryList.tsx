@@ -3,6 +3,7 @@ import { useChartStore } from '@/store/chartStore'
 import { HistoryEntryCard } from './HistoryEntryCard'
 import { AccuracyStats } from './AccuracyStats'
 import { ReviewPanel } from './ReviewPanel'
+import { BenchmarkPanel } from './BenchmarkPanel'
 import { ExportBar } from './ExportBar'
 import type { OutcomeStatus } from '@/engine/review'
 import type { QuestionKind } from '@/engine/questionType'
@@ -18,6 +19,7 @@ export function HistoryList() {
   return (
     <div className="flex flex-col gap-4">
       <AccuracyStats readings={readings} />
+      <BenchmarkPanel readings={readings} />
       <ReviewPanel readings={readings} />
       <ExportBar readings={readings} />
 
@@ -30,7 +32,15 @@ export function HistoryList() {
             onDelete={() => reading.id !== undefined && void remove(reading.id)}
             onRecordOutcome={(status: OutcomeStatus, note: string) => {
               if (reading.id === undefined) return
-              void update(reading.id, { outcome: { status, note, recordedAt: Date.now() } })
+              void update(reading.id, {
+                outcome: { ...reading.outcome, status, note, recordedAt: Date.now(), stale: false },
+              })
+            }}
+            onRecordActual={(actual: 'good' | 'bad', note: string) => {
+              if (reading.id === undefined) return
+              void update(reading.id, {
+                outcome: { ...reading.outcome, actual, note, recordedAt: Date.now() },
+              })
             }}
             onSaveNote={(note: string) => {
               if (reading.id === undefined || !reading.outcome) return

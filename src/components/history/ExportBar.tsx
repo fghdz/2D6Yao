@@ -3,14 +3,18 @@ import { Button } from '@/components/ui/button'
 import { db, type SavedReading } from '@/db/db'
 import { buildReadingsExport, exportFileName } from '@/engine/exportReadings'
 import { canShareFile, downloadFile, shareFile } from '@/lib/saveFile'
-import { verifiedOutcome } from '@/engine/review'
+import { scoreReading } from '@/engine/review'
 
 type Action = 'download' | 'share' | 'copy'
 
 /** 现做现导：直接读库，不依赖页面上已经渲染出来的那份，导出的一定是全量。 */
 async function buildFile(): Promise<{ file: File; text: string }> {
-  const [readings, lessons] = await Promise.all([db.readings.toArray(), db.lessons.toArray()])
-  const text = JSON.stringify(buildReadingsExport(readings, lessons), null, 2)
+  const [readings, lessons, runs] = await Promise.all([
+    db.readings.toArray(),
+    db.lessons.toArray(),
+    db.runs.toArray(),
+  ])
+  const text = JSON.stringify(buildReadingsExport(readings, lessons, new Date(), runs), null, 2)
   const file = new File([text], exportFileName(), { type: 'application/json' })
   return { file, text }
 }
@@ -20,7 +24,7 @@ export function ExportBar({ readings }: { readings: readonly SavedReading[] }) {
   const [message, setMessage] = useState('')
   const [failed, setFailed] = useState(false)
 
-  const verified = readings.filter((reading) => verifiedOutcome(reading)).length
+  const verified = readings.filter((reading) => scoreReading(reading)).length
   // canShare 要拿一个文件才能问；用空壳问一次，只看浏览器支不支持分享 JSON 文件。
   const shareSupported = canShareFile(
     new File(['{}'], 'probe.json', { type: 'application/json' }),

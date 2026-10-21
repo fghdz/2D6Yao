@@ -6,12 +6,15 @@ import type { Lesson, TagRecord } from './review'
 import { errorKindLabels, outcomeLabels, statusOrder } from './review'
 import type { ChartEvidence } from './yongshen'
 import type { LatentState } from './latent'
+import { verdictLines } from './verdict'
 
 const positionLabels = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻']
 
 export interface PromptContext {
   questionType?: string
   question?: string
+  /** 问的是今明几日之内的事。 */
+  nearTerm?: boolean
   evidence?: ChartEvidence
   tags?: readonly ChartTag[]
   matches?: readonly RuleMatch[]
@@ -31,6 +34,7 @@ export function buildChartPrompt(chart: ChartData, context: PromptContext = {}):
 
   if (context.question) lines.push(`问事：${context.question}`)
   if (context.questionType) lines.push(`事类：${context.questionType}`)
+  if (context.nearTerm) lines.push('时限：近事（今明几日之内）')
   lines.push(`本卦：${liuyao.originalName}（${liuyao.palace.name}宫）`)
   lines.push(hasChangedHexagram(liuyao) ? `变卦：${liuyao.changedName}` : '变卦：无（静卦）')
   lines.push(
@@ -162,6 +166,7 @@ export function buildChartPrompt(chart: ChartData, context: PromptContext = {}):
   lines.push(
     '',
     buildInstruction({
+      nearTerm: Boolean(context.nearTerm),
       hasLatent: latent.length > 0,
       hasLocalRecord: lessons.length > 0 || tagRecords.length > 0,
     }),
@@ -177,9 +182,11 @@ function truncate(text: string, limit: number): string {
 
 /** 与 SCHEMA.md 的分工一致：盘面事实既定，推理归 LLM，但每步要带依据。 */
 function buildInstruction({
+  nearTerm,
   hasLatent,
   hasLocalRecord,
 }: {
+  nearTerm: boolean
   hasLatent: boolean
   hasLocalRecord: boolean
 }): string {
@@ -187,7 +194,12 @@ function buildInstruction({
     '以上盘面事实由排盘引擎算出，是既定输入：纳甲、六亲、世应、旺衰、旬空、月破日破、伏神、动变一律照用，不要重算或改写。',
     '请在此基础上推理：先判用神旺衰与生克关系，再权衡命中条文（条文之间可能互相矛盾，需说明为何取此舍彼），然后给出结论与应期。',
     '每条结论标明依据：「依据 [条文编号]」「参照 [书例#编号]」或「推断」；证据不足处直说不足，不要凑。',
+    // 回测里判凶失手的断语，多半援引卦名（否、困、涣）或整卦六冲作主要理由。
+    '断吉凶以用神（及世爻）的旺衰、生克、动变为主。卦名卦象（如否、困、剥、涣、屯）与整卦六冲、六合只作参考，不能单凭它们断吉凶 ——《增删卜易》明言卦名不足凭。',
   ]
+  if (nearTerm) {
+    lines.push('本问属近事：近事逢冲主事速成、速有结果，不主散；六冲主散只适用于长远之事。')
+  }
   if (hasLatent) {
     // 回填数据里最常见的失手：见空断无、见伏断不成，而应事之日恰是那一爻出空填实之日。
     lines.push(
@@ -202,5 +214,10 @@ function buildInstruction({
       '用到修正时标明「参照 [本机修正]」；样本少于 5 卦的应验记录不足以支撑结论，不要当依据用。',
     )
   }
+  // 机读结论：回测靠这一行自动评分，断语重写也不会让评定作废。
+  lines.push(
+    `最后单独一行写结论，只能是这三种之一：${verdictLines.good} / ${verdictLines.bad} / ${verdictLines.unclear}。`,
+    '吉凶都是对问卦人而言（问「会不会被裁」，不被裁为吉）。问成不成、吉不吉的题必须二选一；只有问是什么、在哪、多少这类题，或证据确实两边相当时，才写难断。',
+  )
   return lines.join('\n')
 }

@@ -3,7 +3,8 @@ import { useChart } from '@/hooks/useChart'
 import { promptRuleLimit, useChartEvidence } from '@/hooks/useChartEvidence'
 import { useHistory } from '@/hooks/useHistory'
 import { useLessons } from '@/hooks/useLessons'
-import { loadCases, matchCases, type CorpusCase } from '@/engine/corpus'
+import { loadCases, type CorpusCase } from '@/engine/corpus'
+import { buildReadingPrompt } from '@/engine/readingContext'
 import { lessonsForTags, readingKind, tagRecordsForPrompt, tagReliability } from '@/engine/review'
 import { questionTypes } from '@/engine/questionType'
 import { sixRelatives, type SixRelative } from '@/engine/yongshen'
@@ -15,15 +16,12 @@ import { RuleMatches } from './RuleMatches'
 import { CaseMatches } from './CaseMatches'
 import { PromptPreview } from './PromptPreview'
 import { AIReadingPanel } from './AIReadingPanel'
-import { buildChartPrompt } from '@/engine/promptBuilder'
 
 const pageSize = promptRuleLimit
-const caseCount = 3
 
 export function InterpretationPanel() {
   const { chart, question, chapter, relative, setQuestion, setChapter, setRelative } = useChart()
-  const { rules, rulesFailed, resolved, bookChapter, evidence, tags, matches, latent } =
-    useChartEvidence()
+  const { rules, rulesFailed, bundle } = useChartEvidence()
   const { readings } = useHistory()
   const lessons = useLessons()
   const [cases, setCases] = useState<CorpusCase[] | null>(null)
@@ -45,17 +43,8 @@ export function InterpretationPanel() {
     }
   }, [])
 
-  const shown = matches.slice(0, visible)
-  const caseMatches = useMemo(
-    () =>
-      cases && chart
-        ? matchCases(cases, tags, chart.liuyao.originalName, bookChapter).slice(0, caseCount)
-        : [],
-    [cases, chart, tags, bookChapter],
-  )
-
   // 本机战绩反馈：只把与本卦相关的那几条修正与标签记录并进提示词。
-  const tagIds = useMemo(() => tags.map((tag) => tag.id), [tags])
+  const tagIds = useMemo(() => bundle?.tags.map((tag) => tag.id) ?? [], [bundle])
   const applicable = useMemo(() => lessonsForTags(lessons, tagIds), [lessons, tagIds])
   // 标签战绩只看是非题：取象题的对错和卦象吉凶无关，混进来只是噪音。
   const tagRecords = useMemo(
@@ -67,20 +56,15 @@ export function InterpretationPanel() {
     [readings, tagIds],
   )
 
-  if (!chart) {
+  if (!chart || !bundle) {
     return <p className="text-sm text-text-muted">还没有卦盘，先去「起卦」生成一个。</p>
   }
 
-  const prompt = buildChartPrompt(chart, {
-    question: question.trim() || undefined,
-    questionType: resolved.type
-      ? `${resolved.type.name}（${resolved.typeSource === 'chosen' ? '手选' : '据问题推断'}；${resolved.type.yongshenNote}）`
-      : undefined,
-    evidence: evidence ?? undefined,
-    latent,
-    tags,
-    matches: shown,
-    cases: caseMatches,
+  const { resolved, evidence, tags, matches, latent } = bundle
+  const shown = matches.slice(0, visible)
+  const { prompt, caseMatches } = buildReadingPrompt(chart, question, bundle, {
+    visibleRules: visible,
+    cases,
     lessons: applicable,
     tagRecords,
   })

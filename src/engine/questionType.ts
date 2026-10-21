@@ -18,6 +18,12 @@ export interface QuestionType {
   relative?: SixRelative
   /** 用神说明，显示给用户看。 */
   yongshenNote: string
+  /**
+   * 用神取「所问之人」：自占看世爻，代占按其人与问卦人的关系取六亲。
+   * 占病、官司、行人都是如此 —— 官鬼是病、是官非，不是用神；
+   * 把官鬼当用神，「用神旺」就成了「病重」「官非重」，吉凶整个反过来。
+   */
+  byPerson?: boolean
   /** 关键词；命中越多越可能是这一类。 */
   patterns: ReadonlyArray<string | RegExp>
 }
@@ -32,17 +38,17 @@ export const questionTypes: readonly QuestionType[] = [
     name: '官司·牢狱',
     bookChapter: '官司·牢狱',
     topic: 'general',
-    relative: '官鬼',
-    yongshenNote: '以官鬼为官非',
+    byPerson: true,
+    yongshenNote: '自占以世爻为用神、官鬼为官府对方；代占以其人六亲为用神',
     patterns: ['官司', '起诉', '立案', '开庭', '判刑', '判决', '罚', '坐牢', '拘留', '仲裁', '缓刑', '律师', '被告', '原告', '违法'],
   },
   {
     name: '疾病·伤灾',
     bookChapter: '疾病·伤灾',
     topic: 'general',
-    relative: '官鬼',
-    yongshenNote: '以官鬼为病',
-    patterns: ['病', '手术', '吐血', '癌', '疼', '痛', '症', '炎', '康复', '血压', '住院', '受伤', '车祸', '呕', '发烧', '体检'],
+    byPerson: true,
+    yongshenNote: '自占以世爻为用神、官鬼为病；代占以病人六亲为用神',
+    patterns: ['病', '手术', '吐血', '癌', '疼', '痛', '症', '炎', '康复', '血压', '住院', '受伤', '车祸', '呕', '发烧', '体检', '昏迷', '抢救', '急诊', '救护车', '病危'],
   },
   {
     name: '失物',
@@ -57,14 +63,14 @@ export const questionTypes: readonly QuestionType[] = [
     bookChapter: '财运',
     topic: 'caifu',
     yongshenNote: '以妻财为用神',
-    patterns: ['钱', '财', '欠', '还款', '还钱', '讨', '要回', '收回', '工资', '中标', '投标', '赚', '亏', '股', '彩礼', '押金', '退还', '生意', '投资', '借', '麻将', '赌', '彩票', '货款', '债'],
+    patterns: ['钱', '财', '欠', '还款', '还钱', '讨', '要回', '收回', '工资', '中标', '投标', '赚', '亏', '股', '彩礼', '押金', '退还', '生意', '投资', '借', '麻将', '赌', '彩票', '货款', '债', '谋生', '创业', '开店', '业务', '订单', '钓'],
   },
   {
     name: '婚姻情缘',
     bookChapter: '婚姻情缘',
     topic: 'ganqing',
     yongshenNote: '男以妻财、女以官鬼为对方，兼看世应',
-    patterns: ['对象', '结婚', '婚', '恋', '感情', '分手', '复合', '男朋友', '女朋友', '男友', '女友', '小三', '相亲', '网聊', '约会'],
+    patterns: ['对象', '结婚', '婚', '恋', '感情', '分手', '复合', '男朋友', '女朋友', '男友', '女友', '小三', '相亲', '网聊', '约会', '网友', '和好', '拉黑'],
   },
   {
     name: '官运·事业',
@@ -107,6 +113,7 @@ export const questionTypes: readonly QuestionType[] = [
     name: '出行·行人',
     bookChapter: '出行·行人',
     topic: 'general',
+    byPerson: true,
     yongshenNote: '自己出行看世爻；问行人以其人六亲为用',
     patterns: ['出行', '旅行', '旅游', '出门', '航班', '飞机', '路上', '行程', '行人', '归期'],
   },
@@ -124,6 +131,37 @@ const lostItemRelatives: ReadonlyArray<[RegExp, SixRelative]> = [
   [/狗|猫|宠物|鸟/, '子孙'],
   [/证|护照|文件|合同|车|书/, '父母'],
 ]
+
+/**
+ * 代占时按所问之人取六亲：长辈父母、晚辈子孙、平辈兄弟、丈夫官鬼、妻子妻财。
+ * 先去掉开头「母占：」「一女测:」这类问卦人自述，否则「母占：女儿……」会先撞上「母」。
+ */
+const personRelatives: ReadonlyArray<[RegExp, SixRelative]> = [
+  [/父|母|爸|妈|婆|公公|爷|奶|外公|外婆|岳|姥|长辈|老师|师傅/, '父母'],
+  [/儿|孩子|孙|学生|宝宝|晚辈/, '子孙'],
+  [/老公|丈夫|男友|男朋友|先生/, '官鬼'],
+  [/老婆|妻|女友|女朋友|太太/, '妻财'],
+  [/兄|弟|姐|妹|朋友|同事|同学|闺蜜/, '兄弟'],
+]
+
+const querentPrefix = /^[^:：，,。]{0,14}?[占测问][:：]/
+
+export function personRelative(question: string): SixRelative | undefined {
+  const text = question.replace(querentPrefix, '')
+  let best: { at: number; relative: SixRelative } | undefined
+  for (const [pattern, relative] of personRelatives) {
+    const at = text.search(pattern)
+    if (at >= 0 && (!best || at < best.at)) best = { at, relative }
+  }
+  return best?.relative
+}
+
+/** 近事：今天明天、几个钟头、几天之内的事。近事逢冲主速，不主散。 */
+export function isNearTerm(question: string): boolean {
+  return /今天|今日|今晚|今早|明天|明日|明早|后天|下午|上午|中午|晚上|等下|一会|马上|次日|当天|这周|本周|周[一二三四五六日末]|这几天|近日/.test(
+    question,
+  )
+}
 
 export function findQuestionType(name?: string): QuestionType | undefined {
   return name ? questionTypes.find((type) => type.name === name) : undefined
@@ -176,6 +214,7 @@ export function resolveQuestion(input: {
   if (type?.name === '失物') {
     relative = lostItemRelatives.find(([pattern]) => pattern.test(input.question))?.[1] ?? relative
   }
+  if (type?.byPerson) relative = personRelative(input.question)
   return { type, typeSource, relative, relativeSource: relative ? 'type' : 'none' }
 }
 

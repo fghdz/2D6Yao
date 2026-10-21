@@ -22,6 +22,9 @@ export interface ReadingExchange {
   question: string | null
   thinking: string
   answer: string
+  /** 哪个模型、哪一版应用断的：换模型、改规则之后才分得清是谁的功劳。 */
+  model?: string
+  appVersion?: string
 }
 
 export interface ReadingRequest {

@@ -1,6 +1,14 @@
 import { hasChangedHexagram } from './liuyao'
 import { tagLabels } from './chartTags'
-import { errorKinds, errorKindLabels, outcomeLabels, readingKind, readingTagIds } from './review'
+import {
+  errorKinds,
+  errorKindLabels,
+  outcomeLabels,
+  readingKind,
+  readingTagIds,
+  scoreReading,
+} from './review'
+import { verdictLabels } from './verdict'
 import { questionKindLabels } from './questionType'
 import type { CorpusRule } from './corpus'
 import type { ErrorKind, Lesson, ReadingRecord } from './review'
@@ -70,9 +78,11 @@ function describe(record: ReadingRecord, rulesById: Map<string, CorpusRule>): st
   lines.push(verdict ? `当时的断语：${verdict}` : '当时没存下断语。')
 
   const outcome = record.outcome
-  if (outcome) {
+  const score = scoreReading(record)
+  if (outcome && score) {
+    const actual = outcome.actual ? `实际对问卦人为${verdictLabels[outcome.actual]}；` : ''
     lines.push(
-      `实际结果：${outcomeLabels[outcome.status]}${outcome.note ? ` —— ${truncate(outcome.note, maxNote)}` : '（没写具体经过）'}`,
+      `实际结果：${actual}${outcomeLabels[score.status]}${outcome.note ? ` —— ${truncate(outcome.note, maxNote)}` : '（没写具体经过）'}`,
     )
   }
   return lines

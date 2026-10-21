@@ -4,6 +4,8 @@ import { isConfigured } from '@/engine/aiProvider'
 import { streamReading, type ChatMessage, type ReadingExchange } from '@/engine/llm'
 import { useSettingsStore } from '@/store/settingsStore'
 import { useChartStore } from '@/store/chartStore'
+import { appVersion } from '@/lib/appVersion'
+import { parseVerdict, verdictLabels } from '@/engine/verdict'
 
 type Status = 'idle' | 'running' | 'done' | 'failed'
 
@@ -47,7 +49,10 @@ export function AIReadingPanel({ prompt }: { prompt: string }) {
     ]
     const index = previous.length
 
-    setExchanges(() => [...previous, { question: nextQuestion, thinking: '', answer: '' }])
+    setExchanges(() => [
+      ...previous,
+      { question: nextQuestion, thinking: '', answer: '', model: ai.model, appVersion },
+    ])
     setError('')
     setStatus('running')
 
@@ -125,6 +130,9 @@ export function AIReadingPanel({ prompt }: { prompt: string }) {
             </div>
           )}
           {exchange.answer && <div className="text-sm whitespace-pre-wrap">{exchange.answer}</div>}
+          {index === 0 && exchange.answer && !(running && index === exchanges.length - 1) && (
+            <VerdictLine answer={exchange.answer} />
+          )}
           {running && index === exchanges.length - 1 && !exchange.answer && (
             <p className="text-sm text-text-muted">正在思考…</p>
           )}
@@ -164,5 +172,17 @@ export function AIReadingPanel({ prompt }: { prompt: string }) {
         </div>
       )}
     </div>
+  )
+}
+
+/** 机读结论：有它才能自动评分。模型没按要求写时提示一下，免得以为已经能自动评了。 */
+function VerdictLine({ answer }: { answer: string }) {
+  const verdict = parseVerdict(answer)
+  return (
+    <p className="text-xs text-text-muted">
+      {verdict
+        ? `结论：${verdictLabels[verdict]}（回填实际吉凶后会自动评分）`
+        : '这段断语没有写机读结论（【断】吉/凶/难断），回填时只能手动评定；可点「重新断卦」再试。'}
+    </p>
   )
 }

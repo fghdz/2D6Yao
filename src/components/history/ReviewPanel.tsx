@@ -10,7 +10,7 @@ import {
   postmortemSystemPrompt,
   toLesson,
 } from '@/engine/postmortem'
-import { errorKindLabels, readingKind, tagReliability, verifiedOutcome } from '@/engine/review'
+import { errorKindLabels, readingKind, scoreReading, tagReliability } from '@/engine/review'
 import { addLessons, removeLesson, setLessonEnabled, useLessons } from '@/hooks/useLessons'
 import { useSettingsStore } from '@/store/settingsStore'
 import { TagReliability } from './TagReliability'
@@ -28,7 +28,7 @@ export function ReviewPanel({ readings }: { readings: readonly SavedReading[] })
   const [error, setError] = useState('')
   const [found, setFound] = useState<number | null>(null)
 
-  const verified = useMemo(() => readings.filter((reading) => verifiedOutcome(reading)), [readings])
+  const verified = useMemo(() => readings.filter((reading) => scoreReading(reading)), [readings])
   // 分卦象的战绩只看是非题：取象题说没说中，跟卦象主吉主凶无关。
   const tagRecords = useMemo(
     () => tagReliability(verified.filter((reading) => readingKind(reading) === 'binary')),
@@ -39,8 +39,8 @@ export function ReviewPanel({ readings }: { readings: readonly SavedReading[] })
     [readings],
   )
 
-  const misses = verified.filter((reading) => reading.outcome?.status !== 'accurate')
-  const hits = verified.filter((reading) => reading.outcome?.status === 'accurate')
+  const misses = verified.filter((reading) => scoreReading(reading)?.status !== 'accurate')
+  const hits = verified.filter((reading) => scoreReading(reading)?.status === 'accurate')
   const configured = isConfigured(ai)
 
   const run = async () => {

@@ -2,6 +2,8 @@ import { hasChangedHexagram } from './liuyao'
 import { tagLabels } from './chartTags'
 import {
   countOutcomes,
+  mainAnswer,
+  scoreReading,
   errorKindLabels,
   outcomeLabels,
   readingKind,
@@ -9,11 +11,13 @@ import {
   tagReliability,
 } from './review'
 import { questionKindLabels } from './questionType'
+import { parseVerdict } from './verdict'
+import { summarizeRun, type BenchmarkRun } from './benchmark'
 import type { Lesson, ReadingRecord } from './review'
 
 /** 文件格式标识与版本：以后字段有变，拿到旧文件也能认出来是哪一版。 */
 export const exportFormat = '2d6yao-readings'
-export const exportVersion = 2
+export const exportVersion = 3
 
 const positionLabels = ['初爻', '二爻', '三爻', '四爻', '五爻', '上爻']
 
@@ -85,17 +89,27 @@ function exportReading(record: ExportableReading) {
     ai: (record.exchanges ?? []).map((exchange) => ({
       question: exchange.question,
       answer: exchange.answer,
+      model: exchange.model ?? null,
+      appVersion: exchange.appVersion ?? null,
     })),
+    // 主断语末行的机读结论；旧断语没有这一行，为 null。
+    verdict: parseVerdict(mainAnswer(record)),
     outcome: record.outcome
       ? {
-          status: record.outcome.status,
-          label: outcomeLabels[record.outcome.status],
+          // 实际结果对问卦人的吉凶（只记事实）；旧记录没记为 null。
+          actual: record.outcome.actual ?? null,
+          // 手动评定；stale = 之后重新断过卦，这条手动评定针对旧断语。
+          manualStatus: record.outcome.status ?? null,
+          stale: Boolean(record.outcome.stale),
           note: record.outcome.note,
           recordedAt: iso(record.outcome.recordedAt),
-          // true = 之后重新断过卦，这条评定针对旧断语，不计入统计。
-          stale: Boolean(record.outcome.stale),
         }
       : null,
+    // 实际计入统计的评分：auto = 机读结论对实际吉凶自动比出，manual = 手动评定。
+    score: (() => {
+      const score = scoreReading(record)
+      return score ? { ...score, label: outcomeLabels[score.status] } : null
+    })(),
   }
 }
 
@@ -137,6 +151,7 @@ export function buildReadingsExport(
   readings: readonly ExportableReading[],
   lessons: readonly Lesson[],
   now: Date = new Date(),
+  runs: readonly BenchmarkRun[] = [],
 ) {
   const ordered = [...readings].sort((a, b) => a.createdAt - b.createdAt)
   return {
@@ -148,6 +163,17 @@ export function buildReadingsExport(
       '含问事、AI 断语与回填的实际结果；不含 API 密钥，也不含 AI 的推理过程。',
     summary: summarize(ordered),
     readings: ordered.map(exportReading),
+    // 回测：每轮的模型、版本、成绩与逐题结论（含断语全文，便于逐条复盘）。
+    benchmarkRuns: runs.map((run) => ({
+      id: run.id ?? null,
+      startedAt: iso(run.startedAt),
+      finishedAt: run.finishedAt ? iso(run.finishedAt) : null,
+      model: run.model,
+      provider: run.provider,
+      appVersion: run.appVersion,
+      summary: summarizeRun(run),
+      results: run.results,
+    })),
     lessons: lessons.map((lesson) => ({
       id: lesson.id ?? null,
       createdAt: iso(lesson.createdAt),

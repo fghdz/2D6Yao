@@ -1,6 +1,7 @@
 import { extractChartTags, extractEvidenceTags, tagLabels } from './chartTags'
 import { analyzeEvidence } from './yongshen'
 import { inferQuestionKind, type QuestionKind } from './questionType'
+import { parseVerdict } from './verdict'
 import type { ChartData } from './types'
 import type { ReadingExchange } from './llm'
 
@@ -17,7 +18,16 @@ export const statusOrder: OutcomeStatus[] = ['accurate', 'partial', 'wrong']
 
 /** 事后回填的实际结果：既用来算应验率，也是复盘唯一的原料。 */
 export interface ReadingOutcome {
-  status: OutcomeStatus
+  /**
+   * 手动评定：断语说中了没有。是非题记了实际吉凶、断语又带机读结论时，以自动评分为准，
+   * 这一项只作旧断语（没有机读结论）与取象题的后备。
+   */
+  status?: OutcomeStatus
+  /**
+   * 实际结果对问卦人是吉是凶 —— 只记事实，不管断语怎么说。
+   * 有了它，断语改写、重新断卦、回测都能自动评分，不必再人逐条判。
+   */
+  actual?: 'good' | 'bad'
   note: string
   recordedAt: number
   /**
@@ -46,21 +56,44 @@ export interface ReadingRecord {
   questionKind?: QuestionKind
 }
 
-/** 有效的评定：有回填、且评的是当前这份断语。 */
-export function verifiedOutcome(record: ReadingRecord): ReadingOutcome | undefined {
-  return record.outcome && !record.outcome.stale ? record.outcome : undefined
-}
-
 export function readingKind(record: ReadingRecord): QuestionKind {
   return record.questionKind ?? inferQuestionKind(record.question || record.label || '')
+}
+
+/** 主断语是第一轮（整卦解读）；追问不改变当初的判断。 */
+export function mainAnswer(record: Pick<ReadingRecord, 'exchanges'>): string {
+  return record.exchanges?.[0]?.answer ?? ''
+}
+
+export interface Score {
+  status: OutcomeStatus
+  /** auto = 机读结论对实际吉凶自动比出；manual = 用户手动评定。 */
+  source: 'auto' | 'manual'
+}
+
+/**
+ * 一卦的评分：是非题有实际吉凶、断语有机读吉凶结论，就自动比对；
+ * 否则退回手动评定（重新断过卦的手动评定已过期，不算）。
+ */
+export function scoreReading(record: ReadingRecord): Score | undefined {
+  const outcome = record.outcome
+  if (!outcome) return undefined
+  if (outcome.actual && readingKind(record) === 'binary') {
+    const verdict = parseVerdict(mainAnswer(record))
+    if (verdict === 'good' || verdict === 'bad') {
+      return { status: verdict === outcome.actual ? 'accurate' : 'wrong', source: 'auto' }
+    }
+  }
+  if (outcome.status && !outcome.stale) return { status: outcome.status, source: 'manual' }
+  return undefined
 }
 
 /** 应验率统一口径：应验 / 有效评定，部分应验不折算；过期评定当作待评。 */
 export function countOutcomes(records: readonly ReadingRecord[]) {
   const counts: Record<OutcomeStatus, number> = { accurate: 0, partial: 0, wrong: 0 }
   for (const record of records) {
-    const outcome = verifiedOutcome(record)
-    if (outcome) counts[outcome.status] += 1
+    const score = scoreReading(record)
+    if (score) counts[score.status] += 1
   }
   const verified = counts.accurate + counts.partial + counts.wrong
   return {
@@ -157,7 +190,7 @@ export function tagReliability(records: readonly ReadingRecord[]): TagRecord[] {
   const buckets = new Map<string, Record<OutcomeStatus, number>>()
 
   for (const record of records) {
-    const outcome = verifiedOutcome(record)
+    const outcome = scoreReading(record)
     if (!outcome) continue
     // 同一标签在一卦里只算一次。
     for (const tagId of new Set(readingTagIds(record))) {
