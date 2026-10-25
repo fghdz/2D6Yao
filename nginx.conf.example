@@ -1,0 +1,99 @@
+# ==============================================================================
+# 六爻预测 PWA - 宝塔 Nginx 反向代理配置示例
+# 适配说明：基于 Fork 自 https://github.com/kth2/2D6Yao
+# 
+# 使用方法：将内容覆盖到宝塔的站点配置文件中，
+# 并将 server_name 替换为你自己的实际域名。
+# ==============================================================================
+
+server
+{
+    listen 80;
+    listen [::]:80;
+    listen 443 ssl;
+    listen 443 quic;
+    listen [::]:443 ssl;
+    listen [::]:443 quic;
+    http2 on;
+    http3 on;
+
+    # 替换为你自己的实际域名
+    server_name 你的域名;
+    
+    index index.html index.htm default.htm default.html;
+    include /www/server/panel/vhost/nginx/extension/2D6Yao/*.conf;
+    
+    #CERT-APPLY-CHECK--START
+    include /www/server/panel/vhost/nginx/well-known/2D6Yao.conf;
+    #CERT-APPLY-CHECK--END
+
+    #SSL-START SSL相关配置
+    ssl_certificate    /www/server/panel/vhost/cert/2D6Yao/fullchain.pem;
+    ssl_certificate_key    /www/server/panel/vhost/cert/2D6Yao/privkey.pem;
+    ssl_protocols TLSv1.1 TLSv1.2 TLSv1.3;
+    ssl_ciphers EECDH+CHACHA20:EECDH+CHACHA20-draft:EECDH+AES128:RSA+AES128:EECDH+AES256:RSA+AES256:EECDH+3DES:RSA+3DES:!MD5;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 10m;
+    add_header Strict-Transport-Security "max-age=31536000";
+    add_header Alt-Svc 'quic=":443"; h3=":443"; h3-29=":443"; h3-27=":443";h3-25=":443"; h3-T050=":443"; h3-Q050=":443";h3-Q049=":443";h3-Q048=":443"; h3-Q046=":443"; h3-Q043=":443"';
+    quic_retry on;
+    quic_gso on;
+    ssl_early_data on;
+    error_page 497  https://$host$request_uri;
+    #SSL-END
+
+    #REWRITE-START 伪静态相关配置
+    # 【Fork 适配点 1】注释掉伪静态，防止 rewrite 干扰 Vite dev server 的模块路径
+    #include /www/server/panel/vhost/rewrite/node_2D6Yao.conf;
+    #REWRITE-END
+
+    # 禁止访问的敏感文件
+    location ~* (\.user.ini|\.htaccess|\.htpasswd|\.env.*|\.project|\.bashrc|\.bash_profile|\.bash_logout|\.DS_Store|\.gitignore|\.gitattributes|LICENSE|README\.md|CLAUDE\.md|CHANGELOG\.md|CHANGELOG|CONTRIBUTING\.md|TODO\.md|FAQ\.md|composer\.json|composer\.lock|package(-lock)?\.json|yarn\.lock|pnpm-lock\.yaml|\.\w+~|\.swp|\.swo|\.bak(up)?|\.old|\.tmp|\.temp|\.log|\.sql(\.gz)?|docker-compose\.yml|docker\.env|Dockerfile|\.csproj|\.sln|Cargo\.toml|Cargo\.lock|go\.mod|go\.sum|phpunit\.xml|phpunit\.xml|pom\.xml|build\.gradl|pyproject\.toml|requirements\.txt|application(-\w+)?\.(ya?ml|properties))$
+    {
+        return 404;
+    }
+
+    # 禁止访问的敏感目录
+    # 【Fork 适配点 2】移除 node_modules。因为 Vite 开发服务器需要请求 /node_modules/.vite/deps/，否则会 404
+    location ~* /(\.git|\.svn|\.bzr|\.vscode|\.claude|\.idea|\.ssh|\.github|\.npm|\.yarn|\.pnpm|\.cache|\.husky|\.turbo|\.next|\.nuxt|runtime)/ {
+        return 404;
+    }
+
+    #一键申请SSL证书验证目录相关设置
+    location /.well-known/ {
+        root  /www/wwwroot/2D6Yao;
+    }
+
+    #禁止在证书验证目录放入敏感文件
+    if ( $uri ~ "^/\.well-known/.*\.(php|jsp|py|js|css|lua|ts|go|zip|tar\.gz|rar|7z|sql|bak)$" ) {
+        return 403;
+    }
+
+    # HTTP反向代理相关配置开始 >>>
+    location ~ /purge(/.*) {
+        proxy_cache_purge cache_one $host$request_uri$is_args$args;
+    }
+
+    location / {
+        proxy_pass http://127.0.0.1:5173;
+        # 【Fork 适配点 3】Host 去掉 $server_port。因为带端口的 Host 无法通过 Vite allowedHosts 严格匹配
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header REMOTE-HOST $remote_addr;
+        add_header X-Cache $upstream_cache_status;
+        proxy_set_header X-Host $host;
+        proxy_set_header X-Scheme $scheme;
+        proxy_connect_timeout 30s;
+        proxy_read_timeout 86400s;
+        proxy_send_timeout 30s;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+    }
+    # HTTP反向代理相关配置结束 <<<
+
+    access_log  /www/wwwlogs/2D6Yao.log;
+    error_log  /www/wwwlogs/2D6Yao.error.log;
+}
